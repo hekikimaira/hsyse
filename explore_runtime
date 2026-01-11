@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Explore Runtime</title>
+<style>
+body {
+  margin: 0;
+  background: #111;
+  color: #ddd;
+  font-family: monospace;
+  display: flex;
+  height: 100vh;
+}
+#ui {
+  width: 260px;
+  padding: 10px;
+  border-right: 1px solid #444;
+  box-sizing: border-box;
+}
+#mapWrap {
+  position: relative;
+  flex: 1;
+  overflow: auto;
+  background: #000;
+}
+#mapWrap img {
+  display: block;
+}
+#player {
+  position: absolute;
+  background: rgba(0,200,255,0.7);
+  pointer-events: none;
+}
+button, input {
+  width: 100%;
+  margin-bottom: 6px;
+}
+.small {
+  font-size: 12px;
+  color: #aaa;
+}
+</style>
+</head>
+<body>
+
+<div id="ui">
+  <button id="btnLoad">マップ画像読み込み</button>
+  <label>グリッドサイズ</label>
+  <input type="number" id="gridSize" value="32">
+  <button id="btnPause">Pause / Resume</button>
+  <button id="btnExit">探索終了</button>
+  <div class="small">
+    ↑↓←→ 移動<br>
+    Space: 調べる<br>
+    Enter: 終了
+  </div>
+  <hr>
+  <div id="info"></div>
+</div>
+
+<div id="mapWrap">
+  <img id="mapImg">
+  <div id="player"></div>
+</div>
+
+<script>
+/* ======================================================
+ * ExploreCore
+ * 探索は「事実を検出し、イベントIDを発行する装置」
+ * イベントの意味付け・処理は上位層に委ねる
+ * ====================================================== */
+
+const Explore = {
+  state: {
+    gridSize: 32,
+    cols: 0,
+    rows: 0,
+    collision: [],
+    player: { x: 0, y: 0 },
+    flags: {
+      temp: {},
+      perm: {}
+    },
+    steps: 0,
+    timer: {
+      start: 0,
+      elapsed: 0,
+      paused: false,
+      pauseAt: 0
+    },
+    paused: false,
+    firedEvents: []
+  },
+
+  // イベント定義（意味は持たない）
+  events: {
+    "2,2": { id: "foundKey", trigger: "enter", once: true },
+    "4,1": { id: "inspectDoor", trigger: "inspect", once: false }
+  },
+
+  start(config = {}) {
+    this.state.flags.temp = {};
+    this.state.steps = 0;
+    this.state.firedEvents = [];
+    this.state.timer.start = performance.now();
+    this.state.timer.elapsed = 0;
+    this.state.paused = false;
+  },
+
+  pause() {
+    if (this.state.paused) return;
+    this.state.paused = true;
+    this.state.timer.paused = true;
+    this.state.timer.pauseAt = performance.now();
+  },
+
+  resume() {
+    if (!this.state.paused) return;
+    this.state.paused = false;
+    const now = performance.now();
+    this.state.timer.start += (now - this.state.timer.pauseAt);
+    this.state.timer.paused = false;
+  },
+
+  move(dx, dy) {
+    if (this.state.paused) return;
+
+    const nx = this.state.player.x + dx;
+    const ny = this.state.player.y + dy;
+
+    if (nx < 0 || ny < 0 || nx >= this.state.cols || ny >= this.state.rows) return;
+    if (this.state.collision[ny][nx]) return;
+
+    this.state.player.x = nx;
+    this.state.player.y = ny;
+    this.state.steps++;
+
+    this.checkEvent("enter", nx, ny);
+  },
+
+  inspect() {
+    if (this.state.paused) return;
+    this.checkEvent("inspect", this.state.player.x, this.state.player.y);
+  },
+
+  checkEvent(trigger, x, y) {
+    const key = `${x},${y}`;
+    const ev = this.events[key];
+    if (!ev) return;
+    if (ev.trigger !== trigger) return;
+
+    this.emitEvent(ev.id, trigger);
+
+    if (ev.once) {
+      delete this.events[key];
+    }
+  },
+
+  emitEvent(id, trigger) {
+    this.state.firedEvents.push({
+      id,
+      trigger,
+      step: this.state.steps,
+      timeMs: Math.floor(this.getTime())
+    });
+    console.log("event:", id, trigger);
+  },
+
+  getTime() {
+    if (this.state.timer.paused) {
+      return this.state.timer.pauseAt - this.state.timer.start;
+    }
+    return performance.now() - this.state.timer.start;
+  },
+
+  exit(reason = "manual") {
+    return {
+      reason,
+      steps: this.state.steps,
+      timeMs: Math.floor(this.getTime()),
+      events: this.state.firedEvents,
+      flags: this.state.flags
+    };
+  }
+};
+
+/* ======================================================
+ * DOM / Runtime
+ * ====================================================== */
+
+const mapImg = document.getElementById("mapImg");
+const playerEl = document.getElementById("player");
+const info = document.getElementById("info");
+
+document.getElementById("btnLoad").onclick = loadImage;
+document.getElementById("btnPause").onclick = () => {
+  Explore.state.paused ? Explore.resume() : Explore.pause();
+};
+document.getElementById("btnExit").onclick = () => {
+  console.log("exit:", Explore.exit("manual"));
+};
+
+document.getElementById("gridSize").onchange = e => {
+  Explore.state.gridSize = parseInt(e.target.value);
+};
+
+function loadImage() {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.onchange = () => {
+    const file = input.files[0];
+    mapImg.onload = initMap;
+    mapImg.src = URL.createObjectURL(file);
+  };
+  input.click();
+}
+
+function initMap() {
+  const gs = Explore.state.gridSize;
+  const w = mapImg.naturalWidth;
+  const h = mapImg.naturalHeight;
+
+  const usableW = w - (w % gs);
+  const usableH = h - (h % gs);
+
+  Explore.state.cols = usableW / gs;
+  Explore.state.rows = usableH / gs;
+
+  mapImg.style.width = usableW + "px";
+  mapImg.style.height = usableH + "px";
+
+  generateCollision(usableW, usableH);
+
+  Explore.state.player.x = 0;
+  Explore.state.player.y = 0;
+  Explore.start();
+  update();
+}
+
+function generateCollision(w, h) {
+  const gs = Explore.state.gridSize;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(mapImg, 0, 0, w, h);
+
+  Explore.state.collision = [];
+
+  for (let y = 0; y < Explore.state.rows; y++) {
+    Explore.state.collision[y] = [];
+    for (let x = 0; x < Explore.state.cols; x++) {
+      const px = x * gs + gs / 2;
+      const py = y * gs + gs / 2;
+      const data = ctx.getImageData(px, py, 1, 1).data;
+      Explore.state.collision[y][x] = data[3] < 10;
+    }
+  }
+}
+
+function update() {
+  const gs = Explore.state.gridSize;
+  playerEl.style.left = (Explore.state.player.x * gs) + "px";
+  playerEl.style.top  = (Explore.state.player.y * gs) + "px";
+  playerEl.style.width = gs + "px";
+  playerEl.style.height = gs + "px";
+
+  info.innerHTML =
+    `pos: ${Explore.state.player.x},${Explore.state.player.y}<br>` +
+    `steps: ${Explore.state.steps}<br>` +
+    `time(ms): ${Math.floor(Explore.getTime())}<br>` +
+    `paused: ${Explore.state.paused}`;
+
+  requestAnimationFrame(update);
+}
+
+/* ======================================================
+ * Input
+ * ====================================================== */
+window.addEventListener("keydown", e => {
+  switch (e.key) {
+    case "ArrowUp": Explore.move(0, -1); break;
+    case "ArrowDown": Explore.move(0, 1); break;
+    case "ArrowLeft": Explore.move(-1, 0); break;
+    case "ArrowRight": Explore.move(1, 0); break;
+    case " ": Explore.inspect(); break;
+    case "Enter":
+      console.log("exit:", Explore.exit("manual"));
+      break;
+  }
+});
+</script>
+
+</body>
+</html>
