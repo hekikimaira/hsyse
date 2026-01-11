@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <title>Explore Runtime</title>
+
+<!-- ======================================================
+ * ① スタイル定義
+ * ====================================================== -->
 <style>
 body {
   margin: 0;
@@ -42,72 +46,104 @@ button, input {
 }
 </style>
 </head>
+
 <body>
 
+<!-- ======================================================
+ * ② UIレイアウト
+ * ====================================================== -->
+
+<!-- ②-1 左サイド操作パネル -->
 <div id="ui">
   <button id="btnLoad">マップ画像読み込み</button>
+
   <label>グリッドサイズ</label>
   <input type="number" id="gridSize" value="32">
+
   <button id="btnPause">Pause / Resume</button>
   <button id="btnExit">探索終了</button>
+
   <div class="small">
     ↑↓←→ 移動<br>
     Space: 調べる<br>
     Enter: 終了
   </div>
+
   <hr>
   <div id="info"></div>
 </div>
 
+<!-- ②-2 マップ表示領域 -->
 <div id="mapWrap">
   <img id="mapImg">
   <div id="player"></div>
 </div>
 
+<!-- ======================================================
+ * ③ ExploreCore（探索ロジック本体）
+ * ====================================================== -->
 <script>
 /* ======================================================
- * ExploreCore
+ * ③-0 ExploreCore 方針
  * 探索は「事実を検出し、イベントIDを発行する装置」
- * イベントの意味付け・処理は上位層に委ねる
+ * 意味付け・分岐・フラグ確定は上位層（ノベル）の責務
  * ====================================================== */
 
 const Explore = {
+
+  /* ----------------------------------------------
+   * ③-1 探索状態（state）
+   * ---------------------------------------------- */
   state: {
     gridSize: 32,
     cols: 0,
     rows: 0,
     collision: [],
     player: { x: 0, y: 0 },
+
     flags: {
-      temp: {},
-      perm: {}
+      temp: {},   // 探索セッション内のみ
+      perm: {}    // 同マップ恒久
     },
+
     steps: 0,
+
     timer: {
       start: 0,
       elapsed: 0,
       paused: false,
       pauseAt: 0
     },
+
     paused: false,
     firedEvents: []
   },
 
-  // イベント定義（意味は持たない）
+  /* ----------------------------------------------
+   * ③-2 イベント定義（意味は持たない）
+   * ---------------------------------------------- */
   events: {
     "2,2": { id: "foundKey", trigger: "enter", once: true },
     "4,1": { id: "inspectDoor", trigger: "inspect", once: false }
   },
 
+  /* ----------------------------------------------
+   * ③-3 探索開始
+   * ---------------------------------------------- */
   start(config = {}) {
     this.state.flags.temp = {};
     this.state.steps = 0;
     this.state.firedEvents = [];
+
     this.state.timer.start = performance.now();
     this.state.timer.elapsed = 0;
+    this.state.timer.paused = false;
     this.state.paused = false;
   },
 
+  /* ----------------------------------------------
+   * ③-4 一時停止 / 再開
+   * ---------------------------------------------- */
   pause() {
     if (this.state.paused) return;
     this.state.paused = true;
@@ -123,6 +159,9 @@ const Explore = {
     this.state.timer.paused = false;
   },
 
+  /* ----------------------------------------------
+   * ③-5 移動処理
+   * ---------------------------------------------- */
   move(dx, dy) {
     if (this.state.paused) return;
 
@@ -139,11 +178,17 @@ const Explore = {
     this.checkEvent("enter", nx, ny);
   },
 
+  /* ----------------------------------------------
+   * ③-6 調べる
+   * ---------------------------------------------- */
   inspect() {
     if (this.state.paused) return;
     this.checkEvent("inspect", this.state.player.x, this.state.player.y);
   },
 
+  /* ----------------------------------------------
+   * ③-7 イベント検出
+   * ---------------------------------------------- */
   checkEvent(trigger, x, y) {
     const key = `${x},${y}`;
     const ev = this.events[key];
@@ -157,6 +202,9 @@ const Explore = {
     }
   },
 
+  /* ----------------------------------------------
+   * ③-8 イベント発行
+   * ---------------------------------------------- */
   emitEvent(id, trigger) {
     this.state.firedEvents.push({
       id,
@@ -167,6 +215,9 @@ const Explore = {
     console.log("event:", id, trigger);
   },
 
+  /* ----------------------------------------------
+   * ③-9 経過時間取得
+   * ---------------------------------------------- */
   getTime() {
     if (this.state.timer.paused) {
       return this.state.timer.pauseAt - this.state.timer.start;
@@ -174,6 +225,9 @@ const Explore = {
     return performance.now() - this.state.timer.start;
   },
 
+  /* ----------------------------------------------
+   * ③-10 探索終了
+   * ---------------------------------------------- */
   exit(reason = "manual") {
     return {
       reason,
@@ -186,13 +240,16 @@ const Explore = {
 };
 
 /* ======================================================
- * DOM / Runtime
+ * ④ DOM関連処理
  * ====================================================== */
 
 const mapImg = document.getElementById("mapImg");
 const playerEl = document.getElementById("player");
 const info = document.getElementById("info");
 
+/* ----------------------------------------------
+ * ④-1 UIイベント
+ * ---------------------------------------------- */
 document.getElementById("btnLoad").onclick = loadImage;
 document.getElementById("btnPause").onclick = () => {
   Explore.state.paused ? Explore.resume() : Explore.pause();
@@ -200,11 +257,13 @@ document.getElementById("btnPause").onclick = () => {
 document.getElementById("btnExit").onclick = () => {
   console.log("exit:", Explore.exit("manual"));
 };
-
 document.getElementById("gridSize").onchange = e => {
   Explore.state.gridSize = parseInt(e.target.value);
 };
 
+/* ----------------------------------------------
+ * ④-2 画像読み込み
+ * ---------------------------------------------- */
 function loadImage() {
   const input = document.createElement("input");
   input.type = "file";
@@ -217,6 +276,9 @@ function loadImage() {
   input.click();
 }
 
+/* ----------------------------------------------
+ * ④-3 マップ初期化
+ * ---------------------------------------------- */
 function initMap() {
   const gs = Explore.state.gridSize;
   const w = mapImg.naturalWidth;
@@ -235,10 +297,14 @@ function initMap() {
 
   Explore.state.player.x = 0;
   Explore.state.player.y = 0;
+
   Explore.start();
   update();
 }
 
+/* ----------------------------------------------
+ * ④-4 当たり判定生成（画像→グリッド）
+ * ---------------------------------------------- */
 function generateCollision(w, h) {
   const gs = Explore.state.gridSize;
   const canvas = document.createElement("canvas");
@@ -260,8 +326,12 @@ function generateCollision(w, h) {
   }
 }
 
+/* ----------------------------------------------
+ * ④-5 描画更新
+ * ---------------------------------------------- */
 function update() {
   const gs = Explore.state.gridSize;
+
   playerEl.style.left = (Explore.state.player.x * gs) + "px";
   playerEl.style.top  = (Explore.state.player.y * gs) + "px";
   playerEl.style.width = gs + "px";
@@ -277,7 +347,7 @@ function update() {
 }
 
 /* ======================================================
- * Input
+ * ⑤ 入力処理
  * ====================================================== */
 window.addEventListener("keydown", e => {
   switch (e.key) {
