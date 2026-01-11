@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <!-- ========================================================
+   * ① 基本メタ情報
+   * ====================================================== -->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Novel Engine</title>
+
+  <!-- ①-1 共通スタイル -->
+  <link rel="stylesheet" href="style.css">
+
+  <!-- ========================================================
+   * ② index 専用スタイル
+   * ====================================================== -->
+  <style>
+
+    /* ========================================================
+ * ① FX: SHAKE / FLASH
+ * ====================================================== */
+
+/* ①-1 画面揺れ */
+@keyframes fx-shake {
+  0%   { transform: translate(0, 0); }
+  20%  { transform: translate(-6px, 0); }
+  40%  { transform: translate(6px, 0); }
+  60%  { transform: translate(-4px, 0); }
+  80%  { transform: translate(4px, 0); }
+  100% { transform: translate(0, 0); }
+}
+
+.fx-shake {
+  animation: fx-shake 0.25s linear;
+}
+
+/* ①-2 フラッシュ */
+.fx-flash {
+  position: fixed;
+  inset: 0;
+  background: white;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 9999;
+  animation: fx-flash 0.18s ease-out;
+}
+
+@keyframes fx-flash {
+  0%   { opacity: 0; }
+  30%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ========================================================
+ * ①-3 FADE
+ * ====================================================== */
+
+#fx-fade-layer {
+  
+  position: fixed;
+  inset: 0;
+  background: black;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 9998; /* FLASHより下 */
+  transition: opacity 0.4s linear;
+}
+
+#fx-fade-layer.show {
+  opacity: 1;
+}
+
+    /* ②-1 全体 */
+    body {
+      margin: 0;
+      background: black;
+      overflow: hidden;
+    }
+
+/* ②-2 ステージ（画像比率で固定・中央寄せ） */
+#stage {
+  position: relative;
+  height: 100vh;
+  aspect-ratio: 16 / 9; /* 基準比率：必要なら後で変更 */
+  margin: 0 auto;
+  background: black;
+}
+
+/* ②-3 背景画像（はみ出さない） */
+#bg {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  object-fit: contain; /* cover → contain に変更 */
+}
+
+    /* ======================================================
+     * ③ テキストウィンドウ
+     * ====================================================== */
+    #textWindow {
+      position: absolute;
+      bottom: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 90%;
+      max-width: 900px;
+      background: rgba(0,0,0,0.65);
+      color: #fff;
+      padding: 12px;
+      box-sizing: border-box;
+    }
+
+    /* ③-1 名前表示 */
+    #name {
+      font-weight: bold;
+      margin-bottom: 6px;
+    }
+
+    /* ③-2 本文表示 */
+    #text {
+      line-height: 1.6;
+      min-height: 4em;
+    }
+
+    /* ======================================================
+     * ④ 基本操作ボタン
+     * ====================================================== */
+    #controls {
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 12px;
+    }
+
+    /* ④-1 ボタン共通 */
+    .btn {
+      padding: 6px 14px;
+      font-size: 14px;
+    }
+
+    /* ======================================================
+     * ⑤ ハンバーガーメニュー
+     * ====================================================== */
+    #menuBtn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 20px;
+    }
+
+    /* ⑤-1 メニュー本体（仮） */
+    #menu {
+      position: absolute;
+      top: 50px;
+      right: 10px;
+      background: rgba(0,0,0,0.8);
+      color: #fff;
+      padding: 10px;
+      display: none;
+    }
+
+    /* ⑤-2 メニュー内ボタン */
+    #menu button {
+      display: block;
+      width: 100%;
+      margin-bottom: 6px;
+    }
+    /* ======================================================
+     * ⑫ 選択肢UI
+     * ====================================================== */
+    #choice {
+      position: absolute;
+      bottom: 140px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 90%;
+      max-width: 900px;
+      display: none;
+      gap: 8px;
+      box-sizing: border-box;
+    }
+
+    #choice.show {
+      display: grid;
+    }
+
+    #choice button {
+      padding: 10px 14px;
+      font-size: 15px;
+      text-align: left;
+      background: rgba(0,0,0,0.8);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.3);
+      cursor: pointer;
+    }
+
+    #choice button:hover {
+      background: rgba(255,255,255,0.1);
+    }
+  </style>
+</head>
+
+<body>
+  <!-- ======================================================
+   * ⑥ ステージ
+   * ====================================================== -->
+  <div id="stage">
+<div id="timer">05:00</div>
+
+    <!-- ⑥-1 背景 -->
+    <img id="bg">
+
+    <!-- ==================================================
+     * ⑦ ハンバーガーメニュー
+     * ================================================== -->
+    <button id="menuBtn">☰</button>
+
+    <!-- ⑦-1 メニュー内容（ダミー） -->
+    <div id="menu">
+      <button>セーブ</button>
+      <button>コンフィグ</button>
+      <button>ウィンドウ消し</button>
+      <button>オート</button>
+      <button>スキップ</button>
+      <hr>
+
+<div class="audio-setting">
+  <label>
+    BGM
+    <input type="range" min="0" max="1" step="0.01"
+           value="0.25"
+           oninput="AudioManager.setVolume('bgm', this.value)">
+  </label>
+</div>
+
+<div class="audio-setting">
+  <label>
+    SE
+    <input type="range" min="0" max="1" step="0.01"
+           value="0.7"
+           oninput="AudioManager.setVolume('se', this.value)">
+  </label>
+</div>
+
+<div class="audio-setting">
+  <label>
+    LOOP
+    <input type="range" min="0" max="1" step="0.01"
+           value="0.4"
+           oninput="AudioManager.setVolume('loop', this.value)">
+  </label>
+</div>
+
+    </div>
+
+    <!-- ==================================================
+     * ⑧ テキストウィンドウ
+     * ================================================== -->
+    <!-- ==================================================
+     * ⑧-0 選択肢UI
+     * ================================================== -->
+    <div id="choice" aria-hidden="true"></div>
+
+    <div id="textWindow">
+      <div id="name">名前</div>
+      <div id="text">本文表示エリア</div>
+    </div>
+
+    <!-- ==================================================
+     * ⑨ 基本操作
+     * ================================================== -->
+    <div id="controls">
+      <button id="btnBack" class="btn">◀ 戻る</button>
+      <button id="btnNext" class="btn">▶ 進む</button>
+      <button id="btnSkip" class="btn">⏩ スキップ</button>
+    </div>
+
+
+  </div>
+
+<!-- ======================================================
+ * ⑩ ゲームスクリプト読み込み
+ * ====================================================== -->
+<script src="scenario.js" defer></script>
+<script src="game.js" defer></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  // ====================================================
+  // ⑪-1 メニュー開閉
+  // ====================================================
+  const menuBtn = document.getElementById("menuBtn");
+  const menu = document.getElementById("menu");
+menuBtn.onclick = (e) => {
+  e.stopPropagation();
+  menu.style.display = menu.style.display === "block" ? "none" : "block";
+};
+
+
+  // ====================================================
+  // ⑪-2 基本操作ボタン
+  // ====================================================
+
+  // ▶ 進む
+  document.getElementById("btnNext").onclick = () => {
+    if (typeof next === "function") {
+      next();
+    }
+  };
+
+// ◀ 戻る
+document.getElementById("btnBack").onclick = () => {
+  if (typeof back === "function") {
+    back();
+  }
+};
+
+  // ⏩ スキップ（未実装）
+  document.getElementById("btnSkip").onclick = () => {
+    console.log("SKIP（未実装）");
+  };
+
+const stage = document.getElementById("stage");
+
+stage.addEventListener("click", (e) => {
+
+  AudioManager.unlock();
+
+  // ★ハンバーガーメニューは stage 進行から除外
+  if (e.target.closest("#menu") || e.target.closest("#menuBtn")) return;
+
+  if (state.waitingChoice) {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+
+    Timer.resume();
+    state.waitingChoice = false;
+    choiceBox.classList.remove("show");
+    next();
+    return;
+  }
+
+  if (e.target.closest("button")) return;
+  next();
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+  if (state.waitingChoice) return;
+
+  if (e.key === "ArrowRight") next();
+  if (e.key === "ArrowLeft") back();
+});
+
+}); // ← ★DOMContentLoaded を閉じる
+
+</script>
+<!-- =====================================================
+     ② FX用オーバーレイ
+====================================================== -->
+<div id="fx-flash-layer"></div>
+<div id="fx-fade-layer"></div>
+
+</body>
+</html>

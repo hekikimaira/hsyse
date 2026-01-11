@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ゴブリン退治 シナリオエディタ（安定版・修正版）</title>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    #routes {
+      flex: 0 0 260px;
+      border-right: 1px solid #ccc;
+      padding: 8px;
+      box-sizing: border-box;
+      overflow-y: auto;
+      background: #f5f5f5;
+    }
+
+    #routes h3 {
+      margin: 8px 0 4px;
+      font-size: 14px;
+    }
+
+    #routes button {
+      width: 100%;
+      margin-bottom: 4px;
+    }
+
+    .cmdItem {
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+
+    .cmdItem small {
+      display: block;
+      color: #555;
+      margin: 2px 0 4px;
+    }
+
+    #editor {
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    #editorHeader {
+      padding: 8px;
+      border-bottom: 1px solid #ccc;
+      background: #fafafa;
+    }
+
+    #assetFolders {
+      margin-top: 6px;
+      font-size: 12px;
+    }
+
+    .assetRow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .assetRow label {
+      width: 48px;
+      text-align: right;
+      color: #555;
+    }
+
+    .assetRow input {
+      width: 220px;
+    }
+
+    #editorActions {
+      margin-top: 8px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    #editorActions button {
+      padding: 4px 10px;
+      font-size: 12px;
+    }
+
+    #main {
+      flex: 1 1 auto;
+      display: flex;
+      min-width: 0;
+    }
+
+    #textArea {
+      flex: 1 1 auto;
+      box-sizing: border-box;
+      font-family: monospace;
+      font-size: 14px;
+      padding: 12px;
+      border: none;
+      outline: none;
+      resize: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="routes">
+    <button id="addRoute">＋ ルート追加</button>
+    <div id="routeButtons"></div>
+    <hr />
+
+    <h3>使えるコマンド</h3>
+
+    <div class="cmdItem">
+      @BG &lt;画像&gt;
+      <small>背景画像を変更</small>
+      <button id="bgInsertBtn">画像選択</button>
+    </div>
+
+    <div class="cmdItem">
+      @CHAR &lt;画像&gt;
+      <small>キャラ画像</small>
+      <button id="charInsertBtn">画像選択</button>
+    </div>
+
+    <div class="cmdItem">
+      @NAME &lt;名前&gt;
+      <small>名前表示を変更</small>
+      <button data-cmd="@NAME ナレーション">挿入</button>
+    </div>
+
+    <div class="cmdItem">
+      @FX SHAKE
+      <small>画面揺れ（回数指定可）</small>
+      <button class="fxBtn" data-fx="SHAKE">挿入</button>
+    </div>
+
+    <div class="cmdItem">
+      @FX FLASH
+      <small>フラッシュ（回数指定可）</small>
+      <button class="fxBtn" data-fx="FLASH">挿入</button>
+    </div>
+
+    <div class="cmdItem">
+      @FX FADE_OUT
+      <small>暗転</small>
+      <button data-cmd="@FX FADE_OUT">挿入</button>
+    </div>
+
+    <div class="cmdItem">
+      @FX FADE_IN
+      <small>暗転解除</small>
+      <button data-cmd="@FX FADE_IN">挿入</button>
+    </div>
+
+    <div class="cmdItem">
+      @FX ZOOM
+      <small>未実装（通過のみ）</small>
+      <button data-cmd="@FX ZOOM">挿入</button>
+    </div>
+
+    <div class="cmdItem">
+      @CHOICE
+      <small>通常の選択肢</small>
+      <button data-cmd="@CHOICE">挿入</button>
+    </div>
+
+    <div class="cmdItem">
+      @CHOICE_FREE
+      <small>進行カウントしない選択</small>
+      <button data-cmd="@CHOICE_FREE">挿入</button>
+    </div>
+
+    <div class="cmdItem">
+      @GOTO &lt;ルート&gt;
+      <small>指定ルートへ移動</small>
+      <button data-cmd="@GOTO B">挿入</button>
+    </div>
+
+    <div class="cmdItem">
+      @END
+      <small>シナリオ終了</small>
+      <button data-cmd="@END">挿入</button>
+    </div>
+
+    <div class="cmdItem">
+      @BGM &lt;id&gt;
+      <small>BGM再生</small>
+      <button id="bgmInsertBtn">音声選択</button>
+    </div>
+
+    <div class="cmdItem">
+      @BGM_STOP
+      <small>BGM停止</small>
+      <button data-cmd="@BGM_STOP">挿入</button>
+    </div>
+
+    <div class="cmdItem">
+      @SE &lt;id&gt;
+      <small>単発SE</small>
+      <button id="seInsertBtn">音声選択</button>
+    </div>
+
+    <div class="cmdItem">
+      @LOOP_SE &lt;id&gt;
+      <small>ループSE</small>
+      <button id="loopSeInsertBtn">音声選択</button>
+    </div>
+
+    <div class="cmdItem">
+      @LOOP_SE_STOP
+      <small>ループSE停止</small>
+      <button data-cmd="@LOOP_SE_STOP">挿入</button>
+    </div>
+    <hr />
+
+<h3>タイマー</h3>
+<div class="cmdItem">
+  @TIMER_START
+  <small>タイマー開始（秒指定）</small>
+  <button data-cmd="@TIMER_START 300">300秒</button>
+  <button data-cmd="@TIMER_START 600">600秒</button>
+</div>
+
+<div class="cmdItem">
+  <small>選択コスト（時間消費）</small>
+  <button data-cmd="@TIMER_SUB 5">-5秒</button>
+  <button data-cmd="@TIMER_SUB 10">-10秒</button>
+  <button data-cmd="@TIMER_SUB 30">-30秒</button>
+</div>
+
+<div class="cmdItem">
+  @TIMER_SUB
+  <small>時間を減らす</small>
+  <button data-cmd="@TIMER_SUB 5">-5</button>
+  <button data-cmd="@TIMER_SUB 10">-10</button>
+  <button data-cmd="@TIMER_SUB 30">-30</button>
+</div>
+
+<div class="cmdItem">
+  @TIMER_ADD
+  <small>時間を増やす</small>
+  <button data-cmd="@TIMER_ADD 5">+5</button>
+  <button data-cmd="@TIMER_ADD 10">+10</button>
+</div>
+
+<div class="cmdItem">
+  @TIMER_STOP
+  <small>一時停止</small>
+  <button data-cmd="@TIMER_STOP">挿入</button>
+</div>
+
+<div class="cmdItem">
+  @TIMER_RESUME
+  <small>再開</small>
+  <button data-cmd="@TIMER_RESUME">挿入</button>
+</div>
+
+<div class="cmdItem">
+  @TIMER_SHOW / HIDE
+  <small>表示切替</small>
+  <button data-cmd="@TIMER_SHOW">SHOW</button>
+  <button data-cmd="@TIMER_HIDE">HIDE</button>
+</div>
+
+  </div>
+
+  <div id="editor">
+    <div id="editorHeader">
+      編集中ルート：<span id="currentRoute">---</span>
+
+      <div id="assetFolders">
+        <div class="assetRow"><label>BG</label><input id="bgFolder" value="assets/bg/"></div>
+        <div class="assetRow"><label>CHAR</label><input id="charFolder" value="assets/char/"></div>
+        <div class="assetRow"><label>BGM</label><input id="bgmFolder" value="assets/bgm/"></div>
+        <div class="assetRow"><label>SE</label><input id="seFolder" value="assets/se/"></div>
+      </div>
+
+      <div id="editorActions">
+        <button id="saveRouteBtn">ルート保存</button>
+        <button id="deleteRouteBtn">ルート削除</button>
+        <button id="exportScenarioBtn">scenario.js 書き出し</button>
+      </div>
+    </div>
+
+    <div id="main">
+      <textarea id="textArea"></textarea>
+    </div>
+  </div>
+
+  <script src="scenario.js"></script>
+
+  <script>
+document.addEventListener("DOMContentLoaded", ()=>{
+    let routes = {};
+    let current = null;
+
+    if (window.TEXTS) {
+      Object.keys(TEXTS).forEach(r => {
+        routes[r] = TEXTS[r].filter(l => l !== "@END").join("\n");
+      });
+    }
+
+    const routeButtons = document.getElementById("routeButtons");
+    const textArea = document.getElementById("textArea");
+    const currentRouteLabel = document.getElementById("currentRoute");
+
+// ==============================
+// ファイルピッカー / フォルダ入力参照
+// ==============================
+const bgFilePicker   = document.getElementById("bgFilePicker");
+const charFilePicker = document.getElementById("charFilePicker");
+const bgmFilePicker  = document.getElementById("bgmFilePicker");
+const seFilePicker   = document.getElementById("seFilePicker");
+
+const bgFolder   = document.getElementById("bgFolder");
+const charFolder = document.getElementById("charFolder");
+const bgmFolder  = document.getElementById("bgmFolder");
+const seFolder   = document.getElementById("seFolder");
+
+
+    function refreshRoutes() {
+      routeButtons.innerHTML = "";
+      Object.keys(routes).forEach(r => {
+        const b = document.createElement("button");
+        b.textContent = r;
+        b.onclick = () => openRoute(r);
+        routeButtons.appendChild(b);
+      });
+    }
+
+    function openRoute(r) {
+      current = r;
+      currentRouteLabel.textContent = r;
+      textArea.value = routes[r] || "";
+    }
+
+    document.getElementById("saveRouteBtn").onclick = () => {
+      if (!current) return;
+      routes[current] = textArea.value;
+    };
+
+    document.getElementById("addRoute").onclick = () => {
+      const name = prompt("ルート名を入力");
+      if (!name || routes[name]) return;
+      routes[name] = "";
+      refreshRoutes();
+      openRoute(name);
+    };
+
+    function insertAtCursor(text) {
+      const start = textArea.selectionStart;
+      const end = textArea.selectionEnd;
+      textArea.value = textArea.value.slice(0, start) + text + textArea.value.slice(end);
+      textArea.selectionStart = textArea.selectionEnd = start + text.length;
+      textArea.focus();
+    }
+
+    document.querySelectorAll("#routes button[data-cmd]").forEach(btn => {
+      btn.onclick = () => {
+        if (!current) return;
+        let t = btn.dataset.cmd + "\n";
+        if (btn.dataset.cmd === "@CHOICE" || btn.dataset.cmd === "@CHOICE_FREE") {
+          t = `${btn.dataset.cmd}
+#CHOICE_BEGIN
+A: 選択肢A
+B: 選択肢B
+#CHOICE_END
+`;
+        }
+        insertAtCursor(t);
+      };
+    });
+
+    
+    
+    document.getElementById("deleteRouteBtn").onclick = () => {
+      if (!current) return;
+      if (!confirm(`ルート「${current}」を削除します。よろしいですか？`)) return;
+
+      delete routes[current];
+      current = null;
+      currentRouteLabel.textContent = "---";
+      textArea.value = "";
+
+      refreshRoutes();
+
+      const first = Object.keys(routes)[0];
+      if (first) openRoute(first);
+    };
+
+document.getElementById("exportScenarioBtn").onclick = () => {
+  let out = "window.TEXTS = {\n";
+  Object.keys(routes).forEach(r => {
+    const lines = routes[r].split("\n").map(l => `"${l}"`);
+    out += `  ${r}: [\n    ${lines.join(",\n    ")}\n  ],\n`;
+  });
+  out += "};\n";
+
+  const blob = new Blob([out], { type: "application/javascript" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "scenario.js";
+  a.click();
+};
+
+// ======================================================
+// ファイル選択ボタン連動
+// ======================================================
+
+// BG
+document.getElementById("bgInsertBtn").onclick = () => {
+  if (!current) return;
+  bgFilePicker.click();
+};
+bgFilePicker.onchange = () => {
+  insertFiles("@BG", bgFolder.value, bgFilePicker.files);
+};
+
+// CHAR
+document.getElementById("charInsertBtn").onclick = () => {
+  if (!current) return;
+  charFilePicker.click();
+};
+charFilePicker.onchange = () => {
+  insertFiles("@CHAR", charFolder.value, charFilePicker.files);
+};
+
+// BGM
+document.getElementById("bgmInsertBtn").onclick = () => {
+  if (!current) return;
+  bgmFilePicker.click();
+};
+bgmFilePicker.onchange = () => {
+  insertFiles("@BGM", bgmFolder.value, bgmFilePicker.files);
+};
+
+// SE / LOOP_SE（同一picker）
+document.getElementById("seInsertBtn").onclick = () => {
+  if (!current) return;
+  seFilePicker.dataset.mode = "@SE";
+  seFilePicker.click();
+};
+document.getElementById("loopSeInsertBtn").onclick = () => {
+  if (!current) return;
+  seFilePicker.dataset.mode = "@LOOP_SE";
+  seFilePicker.click();
+};
+seFilePicker.onchange = () => {
+  insertFiles(seFilePicker.dataset.mode, seFolder.value, seFilePicker.files);
+};
+
+// 共通処理
+function insertFiles(cmd, folder, files) {
+  if (!files.length) return;
+  let text = "";
+  Array.from(files).forEach(f => {
+    text += `${cmd} ${folder}${f.name}\n`;
+  });
+  insertAtCursor(text);
+}
+
+    refreshRoutes();
+    const first = Object.keys(routes)[0];
+    if (first) openRoute(first);
+　　});
+  </script>
+
+  <input type="file" id="bgFilePicker" accept="image/*" multiple style="display:none">
+  <input type="file" id="charFilePicker" accept="image/*" multiple style="display:none">
+  <input type="file" id="bgmFilePicker" accept="audio/*" multiple style="display:none">
+  <input type="file" id="seFilePicker" accept="audio/*" multiple style="display:none">
+</body>
+</html>
